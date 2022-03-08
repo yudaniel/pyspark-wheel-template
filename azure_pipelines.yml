@@ -1,0 +1,67 @@
+trigger:
+  - main
+
+variables:
+  python.version: '3.8'
+
+pool:
+  name: Azure Pipelines
+
+stages:
+  - stage: TestAndPublish
+    displayName: Test and Publish Package
+    jobs:
+      - job: test_and_publish
+        pool:
+          name: Azure Pipelines
+        steps:
+          - task: UsePythonVersion@0
+            displayName: 'Use Python $(python.version)'
+            inputs:
+              versionSpec: '$(python.version)'
+
+          - checkout: self
+            persistCredentials: true
+            clean: true
+
+          - script: git checkout main
+            displayName: 'Get Latest Branch'
+
+          - script: |
+              cd $(Build.Repository.LocalPath)
+              pip install -r requirements.txt
+            displayName: 'Load Python Dependencies'
+
+          - bash: |
+              cd $(Build.Repository.LocalPath)
+              pytest ./tests --doctest-modules --junitxml=junit/test-results.xml --cov=src --cov-report=xml
+            displayName: "run the pytest"
+
+          - task: PublishTestResults@2
+            condition: succeededOrFailed()
+            displayName: "Publish Test Results"
+            inputs:
+              testResultsFiles: "$(System.DefaultWorkingDirectory)/junit/test-results.xml"
+              testRunTitle: "Publish test results for Python $(python.version)"
+
+          - task: PublishCodeCoverageResults@1
+            displayName: "Publish Code Coverage Results"
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: "$(System.DefaultWorkingDirectory)/coverage.xml"
+
+          - bash: |
+              cd $(Build.Repository.LocalPath)
+              python setup.py sdist bdist_wheel
+            displayName: 'Build Python Wheels'
+
+          - publish: dist
+            artifact: drop
+            displayName: Publish Build Artifact
+
+
+
+
+
+
+
